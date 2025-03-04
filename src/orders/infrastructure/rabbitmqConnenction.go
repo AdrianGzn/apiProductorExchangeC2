@@ -5,9 +5,12 @@ import (
 	"encoding/json"
 	"log"
 	"time"
+    "os"
+    "fmt"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 	"productor/src/orders/domain"
+    "github.com/joho/godotenv"
 )
 
 type RabbitMQRepository struct {
@@ -15,8 +18,21 @@ type RabbitMQRepository struct {
 	ch   *amqp.Channel
 }
 
+//Para el .env
+func init() {
+	if err := godotenv.Load(); err != nil {
+		log.Fatalf("Error al cargar el archivo .env: %v", err)
+	}
+}
+
 func NewRabbitMQRepository() (*RabbitMQRepository, error) {
-	conn, err := amqp.Dial("amqp://adri:1234@174.129.127.24:5672")
+	username := os.Getenv("USERNAME")
+	password := os.Getenv("PASSWORD")
+	host := os.Getenv("HOST")
+	port := os.Getenv("PORT")
+	rabbitMQURL := fmt.Sprintf("amqp://%s:%s@%s:%s", username, password, host, port)
+
+        conn, err := amqp.Dial(rabbitMQURL)
 	if err != nil {
 		return nil, err
 	}
