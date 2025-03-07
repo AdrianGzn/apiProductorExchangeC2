@@ -2,22 +2,28 @@ package core
 
 import (
 	"log"
-
 	"productor/src/orders/application"
 	"productor/src/orders/infrastructure"
 	"productor/src/core/middlewares"
-
 	"github.com/gin-gonic/gin"
 )
 
 func IniciarRutas() {
-	repo, err := infrastructure.NewRabbitMQRepository()
-	if err != nil {
-		log.Fatalf("Error al conectar con RabbitMQ: %v", err)
-	}
+    mysqlConn, err := GetDBPool()
+    if err != nil {
+        log.Fatalf("Error al obtener la conexión a la base de datos: %v", err)
+    }
 
-	createOrderUseCase := application.NewCreateOrderUseCase(repo)
-	createOrderController := infrastructure.NewCreateOrderController(createOrderUseCase);
+	rabbitmqCh, err := GetChannel()
+	if err != nil {
+        log.Fatalf("Error al obtener la conexión a la base de datos: %v", err)
+    }
+
+    mysqlRepository := infrastructure.NewMysqlRepository(mysqlConn.DB)
+	rabbitqmRepository := infrastructure.NewRabbitRepository(rabbitmqCh.ch)
+
+	createOrderUseCase := application.NewCreateOrderUseCase(rabbitqmRepository, mysqlRepository)
+	createOrderController := infrastructure.NewCreateOrderController(createOrderUseCase)
 
 	router := gin.Default()
 	middleware := middlewares.NewCorsMiddleware()	

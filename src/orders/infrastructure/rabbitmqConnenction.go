@@ -1,108 +1,59 @@
 package infrastructure
 
 import (
-	"context"
-	"encoding/json"
-	"log"
-	"time"
-    "os"
+    "context"
+    "encoding/json"
     "fmt"
+    "log"
+    "time"
 
-	amqp "github.com/rabbitmq/amqp091-go"
-	"productor/src/orders/domain"
-    "github.com/joho/godotenv"
+    amqp "github.com/rabbitmq/amqp091-go"
+    "productor/src/orders/domain"
 )
 
-type RabbitMQRepository struct {
-	conn *amqp.Connection
-	ch   *amqp.Channel
+type MyExchangeLogs struct {
+    ch *amqp.Channel
 }
 
-//Para el .env
-func init() {
-	if err := godotenv.Load(); err != nil {
-		log.Fatalf("Error al cargar el archivo .env: %v", err)
-	}
+func NewRabbitRepository(ch *amqp.Channel) *MyExchangeLogs {
+    if err := ch.ExchangeDeclare(
+        "logs",   // Nombre del exchange
+        "fanout", // Tipo del exchange
+        true,     // Durable
+        false,    // Auto-deleted
+        false,    // Internal
+        false,    // No-wait
+        nil,      // Argumentos
+    ); err != nil {
+        log.Fatalf("Error al declarar el exchange: %v", err)
+    }
+
+    return &MyExchangeLogs{ch: ch}
 }
 
-func NewRabbitMQRepository() (*RabbitMQRepository, error) {
-	username := os.Getenv("USERNAME")
-	password := os.Getenv("PASSWORD")
-	host := os.Getenv("HOST")
-	port := os.Getenv("PORT")
-	rabbitMQURL := fmt.Sprintf("amqp://%s:%s@%s:%s", username, password, host, port)
+func (ch *MyExchangeLogs) Save(order *domain.Order) error {
+    body, err := json.Marshal(order)
+    if err != nil {
+        return fmt.Errorf("error al serializar el pedido: %v", err)
+    }
 
-        conn, err := amqp.Dial(rabbitMQURL)
-	if err != nil {
-		return nil, err
-	}
+    log.Printf("Enviando mensaje: %s", body)
 
-	ch, err := conn.Channel()
-	if err != nil {
-		return nil, err
-	}
+    ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+    defer cancel()
 
-	err = ch.ExchangeDeclare(
-		"logs",   // nombre
-		"fanout", // tipo
-		true,     // durable
-		false,    // auto-deleted
-		false,    // internal
-		false,    // no-wait
-		nil,      // arguments
-	)
-	if err != nil {
-		return nil, err
-	}
+    if err := ch.ch.PublishWithContext(ctx,
+        "logs",  // Exchange
+        "",      // Routing key
+        false,   // Mandatory
+        false,   // Immediate
+        amqp.Publishing{
+            ContentType: "application/json", // Tipo de contenido
+            Body:        body,               // Cuerpo del mensaje
+        }); err != nil {
+        return fmt.Errorf("error al enviar el mensaje a RabbitMQ: %v", err)
+    }
 
-	return &RabbitMQRepository{conn: conn, ch: ch}, nil
+    log.Printf(" [x] Enviado: %s", body)
+    return nil
 }
-
-//para mandarlo a rabbit
-func (repo *RabbitMQRepository) Save(order *domain.Order) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	body, err := json.Marshal(order)
-	if err != nil {
-		return err
-	}
-
-	err = repo.ch.PublishWithContext(ctx,
-		"logs", // exchange
-		"",     // routing key
-		false,  // mandatory
-		false,  // immediate
-		amqp.Publishing{
-			ContentType: "application/json", // en vez de texto va JSON
-			Body:        body,
-		})
-	if err != nil {
-		return err
-	}
-
-	log.Printf(" [x] Sent %s", body)
-	return nil
-}
-
-func (repo *RabbitMQRepository) Close() {
-	if repo.ch != nil {
-		repo.ch.Close()
-	}
-	if repo.conn != nil {
-		repo.conn.Close()
-	}
-}
-
-
-/* No necesario pq se convierte a json
-func bodyFrom(args []string) string {
-        var s string
-        if (len(args) < 2) || os.Args[1] == "" {
-                s = "hello"
-        } else {
-                s = strings.Join(args[1:], " ")
-        }
-        return s
-}
-*/

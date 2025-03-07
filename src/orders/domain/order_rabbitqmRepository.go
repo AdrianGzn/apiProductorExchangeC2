@@ -1,5 +1,5 @@
 package domain
 
-type IOrder interface {
+type IOrderRabbitqm interface {
 	Save(order *Order) error
 }

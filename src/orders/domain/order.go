@@ -1,6 +1,7 @@
 package domain
 
 type Order struct {
+	Id int32			`json:"id"`
 	Name  string  		`json:"name"`
 	Description string 	`json:"description"`
 	Price int32 		`json:"price"`
